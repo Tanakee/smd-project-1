@@ -1,5 +1,5 @@
 {
-  "installCommand": "cd geologapp && npm install",
-  "buildCommand": "cd geologapp && npm run web",
+  "installCommand": "npm install --prefix ./geologapp",
+  "buildCommand": "npm run build:web --prefix ./geologapp",
   "outputDirectory": "geologapp/web-build"
 }
