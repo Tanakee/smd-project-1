@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "installCommand": "npm install --prefix ./geologapp",
+  "buildCommand": "npm run build --prefix ./geologapp",
+  "outputDirectory": "./geologapp/dist"
 }
