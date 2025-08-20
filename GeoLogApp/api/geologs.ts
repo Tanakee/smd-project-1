@@ -14,7 +14,7 @@ const dummyGeoLogs = [
   {
     id: "m2",
     location: "キャナルシティ",
-    feeling: "ショッピング楽しい！",
+    feeling: "ショッピング楽しい",
     tag: "#楽しい",
     latitude: 33.5904,
     longitude: 130.4026,
