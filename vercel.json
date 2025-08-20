@@ -1,5 +1,9 @@
 {
   "installCommand": "npm install --prefix ./geologapp",
   "buildCommand": "npm run build --prefix ./geologapp",
-  "outputDirectory": "./geologapp/dist"
+  "outputDirectory": "./geologapp/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
