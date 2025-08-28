@@ -1,4 +1,3 @@
-// screens/MapScreen.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -14,6 +13,7 @@ import {
   TextInput,
   Image,
   Keyboard,
+  ActivityIndicator, // 追加
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -21,12 +21,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRoute } from "@react-navigation/native";
 import styles from "../styles/MapScreenStyles";
 
-// VercelでデプロイしたAPIのURLを設定してください
 const API_URL = 'https://geolog-xi.vercel.app/api'; 
-// APIから取得した認証トークンをここに保存します（AsyncStorageなどに保存するのが理想です）
 const DUMMY_AUTH_TOKEN = 'your-jwt-token-here'; 
 
-// 画面の高さとボトムシートの展開/収納時の高さを定義
 const screenHeight = Dimensions.get("window").height;
 const MIN_SHEET_HEIGHT = 100;
 const MAX_SHEET_HEIGHT = screenHeight * 0.6;
@@ -48,22 +45,26 @@ export default function MapScreen({ route }) {
   const sheetHeightAnim = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
   const currentSheetHeight = useRef(MIN_SHEET_HEIGHT);
 
-  // ダミーデータではなく、APIから取得したGeoLog投稿を保存するstate
   const [mapGeoLogs, setMapGeoLogs] = useState([]);
+  const [loading, setLoading] = useState(true); // 追加
 
-  // コンポーネントがマウントされたときに現在地を取得
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setErrorMsg("位置情報へのアクセスが拒否されました");
-        return;
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setErrorMsg("位置情報へのアクセスが拒否されました");
+          setLoading(false);
+          return;
+        }
+        let currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation(currentLocation);
+        await fetchGeoLogs(currentLocation.coords.latitude, currentLocation.coords.longitude);
+      } catch (e) {
+        setErrorMsg("位置情報の取得に失敗しました");
+      } finally {
+        setLoading(false);
       }
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation);
-      
-      // APIからヒートマップデータを取得
-      fetchGeoLogs(currentLocation.coords.latitude, currentLocation.coords.longitude);
     })();
   }, []);
 
@@ -77,7 +78,6 @@ export default function MapScreen({ route }) {
     }
   };
 
-  // PanResponder の設定
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -163,7 +163,6 @@ export default function MapScreen({ route }) {
     }
   }, [route?.params]);
 
-  // --- 投稿処理 (ユーザーが入力した場所名をそのまま使用) ---
   const handlePostGeoLog = async () => {
     if (!postText.trim() || !location || !locationNameInput.trim()) {
       Alert.alert("エラー", "場所名、投稿内容、および位置情報が必要です。");
@@ -193,8 +192,7 @@ export default function MapScreen({ route }) {
 
       if (response.status === 201) {
         Alert.alert('成功', 'GeoLogが投稿されました！');
-        // 投稿成功後、データを再取得
-        fetchGeoLogs(location.coords.latitude, location.coords.longitude);
+        await fetchGeoLogs(location.coords.latitude, location.coords.longitude);
         setShowPostField(false);
         setPostText("");
         setLocationNameInput("");
@@ -208,13 +206,16 @@ export default function MapScreen({ route }) {
       Alert.alert('エラー', '投稿中に問題が発生しました。');
     }
   };
-  // --- 投稿処理ここまで ---
 
   return (
     <View style={styles.container}>
-      {/* マップ表示エリア */}
       <View style={styles.mapContainer}>
-        {errorMsg ? (
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.loadingText}>位置情報を取得中...</Text>
+          </View>
+        ) : errorMsg ? (
           <Text style={styles.errorText}>{errorMsg}</Text>
         ) : location ? (
           <MapView
@@ -225,7 +226,7 @@ export default function MapScreen({ route }) {
           >
             {mapGeoLogs.map((item, index) => (
               <Marker
-                key={index} // APIからIDが返るようになったら変更
+                key={index}
                 coordinate={{
                   latitude: item.latitude,
                   longitude: item.longitude,
@@ -241,11 +242,10 @@ export default function MapScreen({ route }) {
             ))}
           </MapView>
         ) : (
-          <Text style={styles.loadingText}>現在地を取得中...</Text>
+          <Text style={styles.loadingText}>現在地を取得できませんでした</Text>
         )}
       </View>
 
-      {/* 現在地ボタン（右下・ボトムシートに追従） */}
       <Animated.View
         style={[
           styles.currentLocationButton,
@@ -274,7 +274,6 @@ export default function MapScreen({ route }) {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 投稿ボタン（左下・ボトムシートに追従） */}
       <Animated.View
         style={[
           styles.postGeoLogButtonLeft,
@@ -292,7 +291,6 @@ export default function MapScreen({ route }) {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 投稿フィールド（簡易版） */}
       {showPostField && (
         <>
           <TouchableOpacity
@@ -331,7 +329,6 @@ export default function MapScreen({ route }) {
               blurOnSubmit={true}
               onSubmitEditing={() => Keyboard.dismiss()}
             />
-            {/* タグ選択UI */}
             <View
               style={{
                 flexDirection: "row",
@@ -387,7 +384,6 @@ export default function MapScreen({ route }) {
         </>
       )}
 
-      {/* ボトムシート */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeightAnim }]}>
         <View {...panResponder.panHandlers} style={styles.sheetHeader}>
           <View style={styles.handleIndicator} /><Text>{" "}</Text>
@@ -439,5 +435,5 @@ export default function MapScreen({ route }) {
         )}
       </Animated.View>
     </View>
-  );
-}
+  )
+};
