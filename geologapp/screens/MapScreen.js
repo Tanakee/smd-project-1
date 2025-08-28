@@ -21,13 +21,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRoute } from "@react-navigation/native";
 import styles from "../styles/MapScreenStyles";
 
+// VercelでデプロイしたAPIのURLを設定してください
+const API_URL = 'https://geolog-xi.vercel.app/api'; 
+// APIから取得した認証トークンをここに保存します（AsyncStorageなどに保存するのが理想です）
+const DUMMY_AUTH_TOKEN = 'your-jwt-token-here'; 
+
 // 画面の高さとボトムシートの展開/収納時の高さを定義
 const screenHeight = Dimensions.get("window").height;
-// MIN_SHEET_HEIGHTは、フィルターバーとハンドルインジケーターが収まる高さに調整
-const MIN_SHEET_HEIGHT = 100; // ボトムシート収納時の高さ (フィルターバー+ハンドル)
-const MAX_SHEET_HEIGHT = screenHeight * 0.6; // ボトムシート展開時の最大高さ (画面の60%)
+const MIN_SHEET_HEIGHT = 100;
+const MAX_SHEET_HEIGHT = screenHeight * 0.6;
 
-// タグの定義
 const TAGS = [
   { label: "楽しい", value: "fun", color: "#FFD600" },
   { label: "悲しい", value: "sad", color: "#90A4AE" },
@@ -41,81 +44,12 @@ const TAGS = [
 export default function MapScreen({ route }) {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  // ボトムシートが展開されているかどうかの状態
-  const [isSheetExpanded, setIsSheetExpanded] = useState(false); // 初期値をfalseに変更 (フィルターバーのみ表示)
-  // ボトムシートの高さのアニメーション値を管理
-  const sheetHeightAnim = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current; // 初期値をMIN_SHEET_HEIGHTに変更
-
-  // PanResponder の状態を管理する ref
-  // アニメーション中の現在の高さを追跡するために使用
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
+  const sheetHeightAnim = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
   const currentSheetHeight = useRef(MIN_SHEET_HEIGHT);
 
-  // ダミーデータ：マップ上のGeoLog投稿（実際の緯度経度を持つ）
-  const [mapGeoLogs, setMapGeoLogs] = useState([
-    {
-      id: "m1",
-      location: "福岡タワー",
-      feeling: "絶景に感動！",
-      tag: "#絶景",
-      latitude: 33.5935,
-      longitude: 130.3508,
-      color: "#2196F3",
-    },
-    {
-      id: "m2",
-      location: "キャナルシティ",
-      feeling: "ショッピング楽しい！",
-      tag: "#楽しい",
-      latitude: 33.5904,
-      longitude: 130.4026,
-      color: "#FFC107",
-    },
-    {
-      id: "m3",
-      location: "櫛田神社",
-      feeling: "歴史を感じる",
-      tag: "#歴史",
-      latitude: 33.5947,
-      longitude: 130.4035,
-      color: "#8BC34A",
-    },
-    {
-      id: "m4",
-      location: "中洲屋台",
-      feeling: "活気があって最高！",
-      tag: "#活気",
-      latitude: 33.593,
-      longitude: 130.402,
-      color: "#F44336",
-    },
-    {
-      id: "m5",
-      location: "大濠公園",
-      feeling: "心が洗われるような景色でした！",
-      tag: "#癒し",
-      latitude: 33.5878,
-      longitude: 130.3792,
-      color: "#4CAF50",
-    },
-    {
-      id: "m6",
-      location: "福岡市動植物園",
-      feeling: "動物たちに癒された！",
-      tag: "#動物",
-      latitude: 33.5779,
-      longitude: 130.3951,
-      color: "#9C27B0",
-    },
-    {
-      id: "m7",
-      location: "マリノアシティ福岡",
-      feeling: "アウトレットで爆買い！",
-      tag: "#買い物",
-      latitude: 33.589,
-      longitude: 130.324,
-      color: "#00BCD4",
-    },
-  ]);
+  // ダミーデータではなく、APIから取得したGeoLog投稿を保存するstate
+  const [mapGeoLogs, setMapGeoLogs] = useState([]);
 
   // コンポーネントがマウントされたときに現在地を取得
   useEffect(() => {
@@ -127,57 +61,52 @@ export default function MapScreen({ route }) {
       }
       let currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation);
+      
+      // APIからヒートマップデータを取得
+      fetchGeoLogs(currentLocation.coords.latitude, currentLocation.coords.longitude);
     })();
   }, []);
+
+  const fetchGeoLogs = async (latitude, longitude) => {
+    try {
+      const response = await fetch(`${API_URL}/geologs?latitude=${latitude}&longitude=${longitude}&radius=0.1`);
+      const data = await response.json();
+      setMapGeoLogs(data);
+    } catch (error) {
+      console.error("Failed to fetch geo logs:", error);
+    }
+  };
 
   // PanResponder の設定
   const panResponder = useRef(
     PanResponder.create({
-      // ジェスチャーが開始されるときにレスポンダーになるべきか
       onStartShouldSetPanResponder: () => true,
-      // ジェスチャーが移動するときにレスポンダーになるべきか
       onMoveShouldSetPanResponder: () => true,
-      // ジェスチャーが開始されたとき
       onPanResponderGrant: () => {
-        // 現在のアニメーションを停止し、現在の高さをオフセットとして設定
         sheetHeightAnim.stopAnimation();
-        // currentSheetHeight.current にはリスナーで更新された実際の値が入っている
       },
-      // ジェスチャーが移動しているとき
       onPanResponderMove: (evt, gestureState) => {
-        // Y方向の移動量 (gestureState.dy) に応じて高さを更新
-        // 下にドラッグすると dy は正の値、上にドラッグすると負の値
-        // 新しい高さ = ドラッグ開始時の高さ - 移動量
         const newHeight = currentSheetHeight.current - gestureState.dy;
-
-        // 高さは MIN_SHEET_HEIGHT と MAX_SHEET_HEIGHT の間に制限
         const clampedHeight = Math.max(
           MIN_SHEET_HEIGHT,
           Math.min(MAX_SHEET_HEIGHT, newHeight)
         );
-        sheetHeightAnim.setValue(clampedHeight); // 直接アニメーション値を設定
+        sheetHeightAnim.setValue(clampedHeight);
       },
-      // ジェスチャーが終了したとき (指を離したとき)
       onPanResponderRelease: (evt, gestureState) => {
-        // 最終的な高さと速度に基づいて、展開または収納を決定
-        const finalHeight = currentSheetHeight.current; // 指を離した時点の高さ
-        const velocity = gestureState.vy; // Y方向の速度
+        const finalHeight = currentSheetHeight.current;
+        const velocity = gestureState.vy;
 
         let targetHeight;
         let newIsExpanded;
 
-        // 上に素早くスワイプした場合、展開
         if (velocity < -0.5) {
           targetHeight = MAX_SHEET_HEIGHT;
           newIsExpanded = true;
-        }
-        // 下に素早くスワイプした場合、収納
-        else if (velocity > 0.5) {
+        } else if (velocity > 0.5) {
           targetHeight = MIN_SHEET_HEIGHT;
           newIsExpanded = false;
-        }
-        // 速度が遅い場合、中間地点で判断
-        else {
+        } else {
           if (finalHeight > (MIN_SHEET_HEIGHT + MAX_SHEET_HEIGHT) / 2) {
             targetHeight = MAX_SHEET_HEIGHT;
             newIsExpanded = true;
@@ -192,7 +121,6 @@ export default function MapScreen({ route }) {
           duration: 300,
           useNativeDriver: false,
         }).start(() => {
-          // アニメーション完了後に現在の高さを更新し、展開状態を更新
           currentSheetHeight.current = targetHeight;
           setIsSheetExpanded(newIsExpanded);
         });
@@ -200,8 +128,6 @@ export default function MapScreen({ route }) {
     })
   ).current;
 
-  // sheetHeightAnim の値が変更されたときに currentSheetHeight.current をリアルタイムで更新
-  // これがドラッグ中の振動を防ぐために非常に重要
   useEffect(() => {
     const listenerId = sheetHeightAnim.addListener(({ value }) => {
       currentSheetHeight.current = value;
@@ -211,7 +137,6 @@ export default function MapScreen({ route }) {
     };
   }, [sheetHeightAnim]);
 
-  // マップの初期表示リージョンを定義（デフォルトは福岡の中心）
   const initialRegion = location
     ? {
         latitude: location.coords.latitude,
@@ -226,19 +151,12 @@ export default function MapScreen({ route }) {
         longitudeDelta: 0.0421,
       };
 
-  const mapRef = useRef(null); // 追加
-
-  // 投稿フィールドの表示状態
+  const mapRef = useRef(null);
   const [showPostField, setShowPostField] = useState(false);
   const [postText, setPostText] = useState("");
-  const [photo, setPhoto] = useState(null);
-  // ★追加：ユーザーが入力する場所の名前
-  const [locationNameInput, setLocationNameInput] = useState(""); 
-
-  // 投稿フィールドの状態
+  const [locationNameInput, setLocationNameInput] = useState("");
   const [selectedTag, setSelectedTag] = useState(TAGS[0].value);
 
-  // 画面遷移時のパラメータで投稿フィールドを開く
   useEffect(() => {
     if (route?.params?.openPost) {
       setShowPostField(true);
@@ -247,30 +165,48 @@ export default function MapScreen({ route }) {
 
   // --- 投稿処理 (ユーザーが入力した場所名をそのまま使用) ---
   const handlePostGeoLog = async () => {
-    if (!postText.trim() || !location || !locationNameInput.trim()) { // locationNameInputの入力チェックを追加
+    if (!postText.trim() || !location || !locationNameInput.trim()) {
       Alert.alert("エラー", "場所名、投稿内容、および位置情報が必要です。");
       return;
     }
 
     const tagObj = TAGS.find((t) => t.value === selectedTag);
 
-    setMapGeoLogs([
-      ...mapGeoLogs,
-      {
-        id: `user-${Date.now()}`,
-        location: locationNameInput.trim(), // ★変更：ユーザーが入力した場所名を使用
-        feeling: postText,
-        tag: `#${tagObj.label}`,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        color: tagObj.color,
-      },
-    ]);
+    const postData = {
+      locationName: locationNameInput.trim(),
+      feelingText: postText,
+      feelingTag: tagObj.label,
+      color: tagObj.color,
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
 
-    setShowPostField(false);
-    setPostText("");
-    setLocationNameInput(""); // ★追加：投稿後に場所名入力をクリア
-    setSelectedTag(TAGS[0].value);
+    try {
+      const response = await fetch(`${API_URL}/geologs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DUMMY_AUTH_TOKEN}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      if (response.status === 201) {
+        Alert.alert('成功', 'GeoLogが投稿されました！');
+        // 投稿成功後、データを再取得
+        fetchGeoLogs(location.coords.latitude, location.coords.longitude);
+        setShowPostField(false);
+        setPostText("");
+        setLocationNameInput("");
+        setSelectedTag(TAGS[0].value);
+      } else {
+        const errorData = await response.json();
+        Alert.alert('エラー', `投稿に失敗しました: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error("Post failed:", error);
+      Alert.alert('エラー', '投稿中に問題が発生しました。');
+    }
   };
   // --- 投稿処理ここまで ---
 
@@ -287,19 +223,19 @@ export default function MapScreen({ route }) {
             initialRegion={initialRegion}
             showsUserLocation={true}
           >
-            {mapGeoLogs.map((item) => (
+            {mapGeoLogs.map((item, index) => (
               <Marker
-                key={item.id}
+                key={index} // APIからIDが返るようになったら変更
                 coordinate={{
                   latitude: item.latitude,
                   longitude: item.longitude,
                 }}
-                title={item.location}
-                description={item.feeling}
+                title={item.locationName}
+                description={item.feelingText}
               >
                 <View style={[styles.customMarker, { backgroundColor: item.color }]}>
                   <Ionicons name="location-sharp" size={16} color="#fff" />
-                  <Text style={styles.customMarkerText}>{item.tag}</Text>
+                  <Text style={styles.customMarkerText}>#{item.feelingTag}</Text>
                 </View>
               </Marker>
             ))}
@@ -314,7 +250,7 @@ export default function MapScreen({ route }) {
         style={[
           styles.currentLocationButton,
           {
-            bottom: Animated.add(sheetHeightAnim, 20), // 20px余白
+            bottom: Animated.add(sheetHeightAnim, 20),
           },
         ]}
         pointerEvents="box-none"
@@ -359,7 +295,6 @@ export default function MapScreen({ route }) {
       {/* 投稿フィールド（簡易版） */}
       {showPostField && (
         <>
-          {/* 背面タップで閉じるエリア */}
           <TouchableOpacity
             style={{
               position: "absolute",
@@ -367,18 +302,16 @@ export default function MapScreen({ route }) {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.2)", // 半透明のグレー
+              backgroundColor: "rgba(0,0,0,0.2)",
               zIndex: 99,
             }}
             activeOpacity={1}
             onPress={() => setShowPostField(false)}
           />
-          {/* 投稿フィールド本体 */}
           <View style={styles.postFieldContainer}>
             <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 8 }}>
               GeoLogを投稿
             </Text>
-            {/* ★追加：場所名入力フィールド */}
             <TextInput
               style={styles.postTextInput}
               placeholder="場所の名前を入力（例: 福岡タワー）"
@@ -430,21 +363,11 @@ export default function MapScreen({ route }) {
                 </TouchableOpacity>
               ))}
             </View>
-            {/* 写真投稿フィールド（ダミー） */}
-            <TouchableOpacity
-              style={styles.photoButton}
-              onPress={() =>
-                Alert.alert("写真投稿", "ここで写真を選択できます（実装例）")
-              }
-            >
-              <Ionicons name="image-outline" size={24} color="#4CAF50" />
-              <Text style={{ marginLeft: 8, color: "#4CAF50" }}>写真を追加</Text>
-            </TouchableOpacity>
             <View style={{ flexDirection: "row", marginTop: 10 }}>
               <TouchableOpacity
                 style={[
                   styles.postActionButton,
-                  { backgroundColor: "#ccc" }, // キャンセル（グレー）
+                  { backgroundColor: "#ccc" },
                 ]}
                 onPress={() => setShowPostField(false)}
               >
@@ -455,7 +378,6 @@ export default function MapScreen({ route }) {
                   styles.postActionButton,
                   { backgroundColor: "#4CAF50", marginLeft: 10 },
                 ]}
-                // handlePostGeoLog を呼び出す
                 onPress={handlePostGeoLog}
               >
                 <Text style={{ color: "#fff" }}>投稿</Text>
@@ -467,13 +389,10 @@ export default function MapScreen({ route }) {
 
       {/* ボトムシート */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeightAnim }]}>
-        {/* ...既存のボトムシート内容... */}
         <View {...panResponder.panHandlers} style={styles.sheetHeader}>
           <View style={styles.handleIndicator} /><Text>{" "}</Text>
-          {/* ドラッグ可能なことを示すインジケーター */}
           <View style={styles.filterBar}>
             <Text>{" "}</Text>
-            {/* フィルターバーの内容 */}
             <TouchableOpacity style={styles.filterButton}>
               <Ionicons name="options-outline" size={24} color="#333" />
               <Text style={styles.filterButtonText}>フィルター</Text>
@@ -485,13 +404,12 @@ export default function MapScreen({ route }) {
           </View>
         </View>
 
-        {/* リストコンテンツは、isSheetExpanded が true の場合に表示 */}
         {isSheetExpanded && (
           <ScrollView style={styles.listContent}>
             <Text style={styles.nearbyTitle}>現在地周辺のGeoLog</Text>
-            {mapGeoLogs.map((item) => (
+            {mapGeoLogs.map((item, index) => (
               <TouchableOpacity
-                key={item.id}
+                key={index}
                 style={styles.nearbyGeoLogCard}
                 onPress={() => {
                   if (mapRef.current) {
@@ -502,7 +420,7 @@ export default function MapScreen({ route }) {
                         latitudeDelta: 0.01,
                         longitudeDelta: 0.01,
                       },
-                      500 // アニメーション時間(ms)
+                      500
                     );
                   }
                 }}
@@ -511,9 +429,9 @@ export default function MapScreen({ route }) {
                 <Ionicons name="pin" size={20} color={item.color} />
                 <View style={styles.nearbyGeoLogContent}>
                   <Text style={styles.nearbyGeoLogLocation}>
-                    {item.location}
+                    {item.locationName}
                   </Text>
-                  <Text style={styles.nearbyGeoLogFeeling}>{item.feeling}</Text>
+                  <Text style={styles.nearbyGeoLogFeeling}>{item.feelingText}</Text>
                 </View>
               </TouchableOpacity>
             ))}
