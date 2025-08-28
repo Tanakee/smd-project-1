@@ -3,8 +3,7 @@
   "buildCommand": "npm run build --prefix ./geologapp",
   "outputDirectory": "./geologapp/dist",
   "rewrites": [
-    { "source": "/api/geologs", "destination": "/geologapp/api/geologs.ts" },
-    { "source": "/api/auth", "destination": "/geologapp/api/auth.ts" },
-    { "source": "/(.*)", "destination": "/geologapp/dist/index.html" }
+    {"source": "/api/(.*)", "destination": "/geologapp/api/$1"},
+    {"source": "/(.*)", "destination": "/geologapp/dist/index.html"}
   ]
 }
