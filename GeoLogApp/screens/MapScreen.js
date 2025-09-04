@@ -3,20 +3,18 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Dimensions,
   Animated,
   PanResponder,
   TextInput,
-  Keyboard,
   Alert,
+  Modal,
+  ScrollView,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
-import { useRoute } from "@react-navigation/native";
 import styles from "../styles/MapScreenStyles";
 
 const screenHeight = Dimensions.get("window").height;
@@ -36,17 +34,15 @@ const TAGS = [
 export default function MapScreen({ route }) {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [mapGeoLogs, setMapGeoLogs] = useState([]); // <- ここを空配列に変更
-  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
-  const sheetHeightAnim = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
-  const currentSheetHeight = useRef(MIN_SHEET_HEIGHT);
+  const [mapGeoLogs, setMapGeoLogs] = useState([]);
   const [showPostField, setShowPostField] = useState(false);
+
   const [postText, setPostText] = useState("");
   const [locationNameInput, setLocationNameInput] = useState("");
   const [selectedTag, setSelectedTag] = useState(TAGS[0].value);
 
   const mapRef = useRef(null);
-  
+
   // --- 現在地取得 ---
   useEffect(() => {
     (async () => {
@@ -62,111 +58,170 @@ export default function MapScreen({ route }) {
 
   // --- バックエンドから投稿データを取得 ---
   useEffect(() => {
-    fetch("http://192.168.2.181:3000/api/posts") // <- 自分のPCのIPに変更
-      .then(res => res.json())
-      .then(data => setMapGeoLogs(data))
-      .catch(err => console.error("API取得エラー:", err));
+    fetch("http://192.168.2.181:3000/api/posts")
+      .then((res) => res.json())
+      .then((data) => setMapGeoLogs(data))
+      .catch((err) => console.error("API取得エラー:", err));
   }, []);
 
-  // 画面遷移で投稿フィールド開く
-  useEffect(() => {
-    if (route?.params?.openPost) setShowPostField(true);
-  }, [route?.params]);
-
+  // --- 投稿処理 ---
   const handlePostGeoLog = async () => {
-  if (!postText.trim() || !location || !locationNameInput.trim()) {
-    Alert.alert("エラー", "場所名、投稿内容、および位置情報が必要です。");
-    return;
-  }
-  const tagObj = TAGS.find(t => t.value === selectedTag);
+    if (!postText.trim() || !location || !locationNameInput.trim()) {
+      Alert.alert("エラー", "場所名、投稿内容、および位置情報が必要です。");
+      return;
+    }
+    const tagObj = TAGS.find((t) => t.value === selectedTag);
 
-  try {
-    const response = await fetch("http://192.168.2.181:3000/api/geolog", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: locationNameInput.trim(),
-        feeling: postText,
-        tag: `#${tagObj.label}`,
+    try {
+      const response = await fetch("http://192.168.2.181:3000/api/geolog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: locationNameInput.trim(),
+          feeling: postText,
+          tag: `#${tagObj.label}`,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        }),
+      });
+      if (!response.ok) throw new Error("サーバーエラー");
+      const newPost = await response.json();
+
+      setMapGeoLogs([...mapGeoLogs, newPost]);
+      setShowPostField(false);
+      setPostText("");
+      setLocationNameInput("");
+      setSelectedTag(TAGS[0].value);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("投稿に失敗しました", "通信エラーまたはサーバーエラーです。");
+    }
+  };
+
+  // --- 初期位置 ---
+  const initialRegion = location
+    ? {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-      }),
-    });
-    if (!response.ok) throw new Error("サーバーエラー");
-    const newPost = await response.json();
-
-    // 成功したらマップに追加
-    setMapGeoLogs([...mapGeoLogs, newPost]);
-
-    setShowPostField(false);
-    setPostText("");
-    setLocationNameInput("");
-    setSelectedTag(TAGS[0].value);
-  } catch (error) {
-    console.error(error);
-    Alert.alert("投稿に失敗しました", "通信エラーまたはサーバーエラーです。");
-  }
-};
-  // --- PanResponder は省略（既存のまま利用） ---
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => sheetHeightAnim.stopAnimation(),
-      onPanResponderMove: (evt, gestureState) => {
-        const newHeight = currentSheetHeight.current - gestureState.dy;
-        const clampedHeight = Math.max(MIN_SHEET_HEIGHT, Math.min(MAX_SHEET_HEIGHT, newHeight));
-        sheetHeightAnim.setValue(clampedHeight);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        const finalHeight = currentSheetHeight.current;
-        const velocity = gestureState.vy;
-        let targetHeight, newIsExpanded;
-        if (velocity < -0.5) { targetHeight = MAX_SHEET_HEIGHT; newIsExpanded = true; }
-        else if (velocity > 0.5) { targetHeight = MIN_SHEET_HEIGHT; newIsExpanded = false; }
-        else {
-          if (finalHeight > (MIN_SHEET_HEIGHT + MAX_SHEET_HEIGHT)/2) {
-            targetHeight = MAX_SHEET_HEIGHT; newIsExpanded = true;
-          } else {
-            targetHeight = MIN_SHEET_HEIGHT; newIsExpanded = false;
-          }
-        }
-        Animated.timing(sheetHeightAnim, { toValue: targetHeight, duration: 300, useNativeDriver: false })
-          .start(() => { currentSheetHeight.current = targetHeight; setIsSheetExpanded(newIsExpanded); });
-      },
-    })
-  ).current;
-
-  useEffect(() => {
-    const listenerId = sheetHeightAnim.addListener(({ value }) => currentSheetHeight.current = value);
-    return () => sheetHeightAnim.removeListener(listenerId);
-  }, [sheetHeightAnim]);
-
-  const initialRegion = location
-    ? { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.0922, longitudeDelta: 0.0421 }
-    : { latitude: 33.59035, longitude: 130.40171, latitudeDelta: 0.0922, longitudeDelta: 0.0421 };
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      }
+    : {
+        latitude: 33.59035,
+        longitude: 130.40171,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      };
 
   return (
     <View style={styles.container}>
       {/* マップ */}
       <View style={styles.mapContainer}>
-        {errorMsg ? <Text>{errorMsg}</Text> : location ? (
-          <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion} showsUserLocation={true}>
-            {mapGeoLogs.map(item => (
-              <Marker key={item.id} coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-                title={item.location} description={item.feeling}>
-                <View style={[styles.customMarker, { backgroundColor: item.color }]}>
+        {errorMsg ? (
+          <Text>{errorMsg}</Text>
+        ) : location ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={initialRegion}
+            showsUserLocation={true}
+          >
+            {mapGeoLogs.map((item) => (
+              <Marker
+                key={item.id}
+                coordinate={{ latitude: item.latitude, longitude: item.longitude }}
+                title={item.location}
+                description={item.feeling}
+              >
+                <View
+                  style={[styles.customMarker, { backgroundColor: item.color }]}
+                >
                   <Ionicons name="location-sharp" size={16} color="#fff" />
                   <Text style={styles.customMarkerText}>{item.tag}</Text>
                 </View>
               </Marker>
             ))}
           </MapView>
-        ) : <Text>現在地を取得中...</Text>}
+        ) : (
+          <Text>現在地を取得中...</Text>
+        )}
       </View>
 
-      {/* 投稿ボタンなど省略、既存のコードをそのまま利用 */}
+      {/* 左下のGeoLog投稿ボタン */}
+      <TouchableOpacity
+        style={styles.postGeoLogButtonLeft}
+        onPress={() => {
+          if (!location) {
+            Alert.alert("エラー", "位置情報が取得できていません。");
+            return;
+          }
+          setShowPostField(true);
+        }}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+        <Text style={styles.postGeoLogButtonText}>投稿</Text>
+      </TouchableOpacity>
 
+      {/* 投稿モーダル */}
+      <Modal visible={showPostField} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>GeoLogを投稿</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="場所の名前を入力（例: 福岡タワー）"
+              value={locationNameInput}
+              onChangeText={setLocationNameInput}
+            />
+            <TextInput
+              style={[styles.input, { height: 80 }]}
+              placeholder="感じたことを入力..."
+              multiline
+              value={postText}
+              onChangeText={setPostText}
+            />
+
+            {/* タグ選択 */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {TAGS.map((tag) => (
+                <TouchableOpacity
+                  key={tag.value}
+                  style={[
+                    styles.tag,
+                    selectedTag === tag.value && styles.tagSelected,
+                  ]}
+                  onPress={() => setSelectedTag(tag.value)}
+                >
+                  <Text
+                    style={{
+                      color: selectedTag === tag.value ? "white" : "#333",
+                    }}
+                  >
+                    #{tag.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* ボタン */}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: "#ccc" }]}
+                onPress={() => setShowPostField(false)}
+              >
+                <Text>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: "#2e7d32" }]}
+                onPress={handlePostGeoLog}
+              >
+                <Text style={{ color: "white" }}>投稿</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
