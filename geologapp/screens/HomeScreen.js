@@ -1,60 +1,55 @@
 // screens/HomeScreen.js
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // アイコン表示のために利用
+import { View, Text, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import styles from "../styles/HomeScreenStyles";
 
 export default function HomeScreen({ navigation }) {
-  // ダミーデータ：現在の場所の感情サマリー
   const currentFeeling = {
-    location: '福岡市中央区',
-    summary: '穏やかな午後',
-    mainTag: '#癒し',
-    icon: 'leaf-outline', // 癒しをイメージするアイコン
+    location: '博多駅',
+    summary: '活気と少しの苛立ち',
+    mainTag: '#通勤',
+    icon: 'train-outline',
   };
 
-  // ダミーデータ：注目のお題
   const featuredTopic = {
     title: '今日のGeoLogミッション',
-    description: '#心惹かれる風景 を見つけよう',
-    imageUrl: 'https://placehold.co/300x150/A0D9B1/000?text=今日のテーマ', // プレースホルダー画像
+    description: '博多のパワースポットを探して #平穏 を投稿しよう',
+    imageUrl: 'https://placehold.co/300x150/9E9E9E/000?text=博多の神社仏閣',
   };
 
-  // ダミーデータ：おすすめGeoLog投稿
   const recommendedPosts = [
     {
       id: '1',
       user: 'GeoLog太郎',
-      location: '大濠公園',
-      feeling: '心が洗われるような景色でした！',
-      tags: ['#感動', '#自然'],
-      imageUrl: 'https://placehold.co/300x200/B0E0E6/000?text=大濠公園', // プレースホルダー画像
+      location: 'キャナルシティ',
+      feeling: '噴水ショーが綺麗！心が踊るような #喜び',
+      tags: ['#楽しい', '#感動'],
+      imageUrl: 'https://placehold.co/300x200/FFD600/000?text=キャナルシティ博多',
       likes: 120,
     },
     {
       id: '2',
       user: 'GeoLog花子',
-      location: '天神地下街',
-      feeling: '雨の日でも楽しめる隠れ家カフェ発見☕️',
-      tags: ['#カフェ', '#発見'],
-      imageUrl: 'https://placehold.co/300x200/F0E68C/000?text=カフェ', // プレースホルダー画像
+      location: '中洲屋台',
+      feeling: '屋台の雰囲気に圧倒されて #驚き',
+      tags: ['#グルメ', '#発見'],
+      imageUrl: 'https://placehold.co/300x200/00B8D4/000?text=中洲屋台',
       likes: 85,
     },
     {
       id: '3',
       user: 'GeoLog次郎',
       location: '博多駅',
-      feeling: '新幹線を見るだけでワクワクする！',
-      tags: ['#ワクワク', '#乗り物'],
-      imageUrl: 'https://placehold.co/300x200/DDA0DD/000?text=博多駅', // プレースホルダー画像
+      feeling: '雨でびしょ濡れ、最悪... #悲しみ',
+      tags: ['#憂鬱', '#雨'],
+      imageUrl: 'https://placehold.co/300x200/7986CB/000?text=博多駅',
       likes: 95,
     },
   ];
 
   return (
-    // 全体をスクロール可能にするScrollView
     <ScrollView style={styles.container}>
-      {/* 現在の場所の感情サマリーセクション */}
       <View style={styles.currentFeelingCard}>
         <Text style={styles.currentLocationText}>{currentFeeling.location}</Text>
         <View style={styles.feelingSummary}>
@@ -70,7 +65,6 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* 注目のお題セクション */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>注目のお題</Text>
         <View style={styles.featuredTopicCard}>
@@ -82,7 +76,6 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* おすすめGeoLog投稿セクション */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>あなたへのおすすめGeoLog</Text>
         {recommendedPosts.map(post => (
